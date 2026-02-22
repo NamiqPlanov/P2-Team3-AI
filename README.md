@@ -34,3 +34,20 @@ python main.py
 5. The program prints the initial board, solves the problem using either **CSP Backtracking** for `n <= 30` or **Min-Conflicts** for larger `n`.
 
 ---
+## Algorithms
+
+### Min-Conflicts (Iterative Search)
+
+- Randomly initializes queens on the board
+- Iteratively selects conflicted queens
+- and moves them to minimize conflicts,
+- Effective for large boards like `n > 30`.
+
+---
+
+## Example Output (will be added)
+
+```
+```
+---
+
