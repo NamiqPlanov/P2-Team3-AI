@@ -48,14 +48,14 @@ def ac3(domains, n):
 # edit: Correct arc-consistency logic
 def revise(domains, xi, xj):
     revised = False
-    remove_vals = set()
-    for vi in domains[xi]:
-        # remove vi if there is NO supporting value in xj
-        if not any(vi != vj and abs(xi-xj) != abs(vi-vj) for vj in domains[xj]):
-            remove_vals.add(vi)
+    if len(domains[xj]) == 1:
+        vj = next(iter(domains[xj]))
+        diff = abs(xi - xj)
+        forbidden = {vj, vj + diff, vj - diff}
+        to_remove = domains[xi] & forbidden
+        if to_remove:
+            domains[xi] -= to_remove
             revised = True
-
-    domains[xi] -= remove_vals
     return revised
 
 
@@ -82,11 +82,13 @@ def backtracking_csp(n):
     ac3(domains, n)
     start = [-1]*n
     stack = [(start, domains)]
+    steps = 0  # <-- step counter
     while stack:
+        steps += 1
         assignment, doms = stack.pop()
         if all(v != -1 for v in assignment):
             if sum(conflicts(assignment, r, assignment[r]) for r in range(n)) == 0:
-                return assignment
+                return assignment, steps  # <-- return steps
             continue
         unassigned = [r for r in range(n) if assignment[r] == -1]
         row = select_var_mrv(unassigned, doms)
@@ -98,7 +100,7 @@ def backtracking_csp(n):
             if ac3(new_domains, n):
                 stack.append((new_assign, new_domains))
 
-    return None
+    return None, steps  # <-- also return steps if no solution
 
 
 # Min-Conflicts (Iterative Search)
@@ -124,7 +126,7 @@ def min_conflicts(n, max_steps=200000):
 # Runner
 if __name__ == "__main__":
     try:
-        initial = read_board("p1_n-queens.txt")
+        initial = read_board("2_n-queen.txt")
         n = len(initial)
     except FileNotFoundError:
         print("n-queen.txt not found → using random n")
@@ -137,15 +139,9 @@ if __name__ == "__main__":
     tracemalloc.start()
     t0 = time.perf_counter()
 
-    if n <= 30:
-        solution = backtracking_csp(n)
-        alg_name = "CSP Backtracking"
-        heuristics_used = "MRV + LCV + TieBreak + AC3"
-    else:
-        # edit: unpack returned tuple
-        solution, steps = min_conflicts(n)
-        alg_name = "Min-Conflicts"
-        heuristics_used = "Min-Conflicts + LCV-style move"
+    solution, steps = backtracking_csp(n)
+    alg_name = "CSP Backtracking"
+    heuristics_used = "MRV + LCV + TieBreak + AC3"
 
     t1 = time.perf_counter()
     peak_mem = tracemalloc.get_traced_memory()[1] / 1024
@@ -158,12 +154,11 @@ if __name__ == "__main__":
     else:
         total_conf = "N/A"
 
-    header = f"{'Algorithm':<18} | {'Heuristics':<28} | {'Conflicts':<10} | {'Time(ms)':<10} | {'Mem(KB)':<10} | Solved"
+    header = f"{'Algorithm':<18} | {'Heuristics':<28} | {'Conflicts':<10} | {'Time(ms)':<10} | {'Mem(KB)':<10} | {'Solved':<6} | {'Steps'}"
     print("\n" + header)
     print("-"*len(header))
 
-    print(f"{alg_name:<18} | {heuristics_used:<28} | {total_conf:<10} | {time_ms:<10.2f} | {peak_mem:<10.2f} | {'Yes' if solution else 'No'}")
-
+    print(f"{alg_name:<18} | {heuristics_used:<28} | {total_conf:<10} | {time_ms:<10.2f} | {peak_mem:<10.2f} | {'Yes' if solution else 'No'} | {steps}")
     if solution:
         print("\nSolved board:")
         print_board(solution)
