@@ -45,11 +45,13 @@ def ac3(domains, n):
     return True
 
 
+# edit: Correct arc-consistency logic
 def revise(domains, xi, xj):
     revised = False
     remove_vals = set()
     for vi in domains[xi]:
-        if all(vi == vj or abs(xi-xj) == abs(vi-vj) for vj in domains[xj]):
+        # remove vi if there is NO supporting value in xj
+        if not any(vi != vj and abs(xi-xj) != abs(vi-vj) for vj in domains[xj]):
             remove_vals.add(vi)
             revised = True
 
@@ -100,7 +102,6 @@ def backtracking_csp(n):
 
 
 # Min-Conflicts (Iterative Search)
-
 def min_conflicts(n, max_steps=200000):
     board = list(range(n))
     random.shuffle(board)
@@ -111,15 +112,16 @@ def min_conflicts(n, max_steps=200000):
         if not conflicted:
             return board, steps
         row = random.choice(conflicted)
-        best = min(range(n), key=lambda c: conflicts(board, row, c))
-        board[row] = best
+
+        # edit: random tie-breaking among best columns
+        min_conf = min(conflicts(board, row, c) for c in range(n))
+        best_cols = [c for c in range(n) if conflicts(board, row, c) == min_conf]
+        board[row] = random.choice(best_cols)
 
     return None, steps
 
 
-#Runner
-#Here it checks if the file is found then runs this file, otherwise generate random board
-
+# Runner
 if __name__ == "__main__":
     try:
         initial = read_board("p1_n-queens.txt")
@@ -128,16 +130,20 @@ if __name__ == "__main__":
         print("n-queen.txt not found → using random n")
         n = int(input('Number of lines:'))
         initial = [random.randint(0, n-1) for _ in range(n)]
+
     print("Initial board:")
     print_board(initial)
+
     tracemalloc.start()
     t0 = time.perf_counter()
+
     if n <= 30:
         solution = backtracking_csp(n)
         alg_name = "CSP Backtracking"
         heuristics_used = "MRV + LCV + TieBreak + AC3"
     else:
-        solution = min_conflicts(n)
+        # edit: unpack returned tuple
+        solution, steps = min_conflicts(n)
         alg_name = "Min-Conflicts"
         heuristics_used = "Min-Conflicts + LCV-style move"
 
