@@ -1,19 +1,19 @@
 import random
 import time
 import tracemalloc
-from main import backtracking_csp, min_conflicts, conflicts, print_board, read_board
-
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from main import backtracking_csp, min_conflicts, conflicts, print_board
 
 def validate_input(n):
     if not (10 <= n <= 1000):
         raise ValueError("n must satisfy 10 <= n <= 1000")
 
-
 def generate_random_board(n):
     board = list(range(n))
     random.shuffle(board)
     return board
-
 
 def run_algorithm(name, func, n):
     tracemalloc.start()
@@ -27,8 +27,7 @@ def run_algorithm(name, func, n):
 
     time_ms = (t1 - t0) * 1000
 
-    # --- ALWAYS UNPACK solution and steps ---
-    solution, steps = result  # works for BOTH algorithms now
+    solution, steps = result  # works for both algorithms
 
     if solution:
         total_conf = sum(conflicts(solution, r, solution[r]) for r in range(n)) // 2
@@ -46,41 +45,78 @@ def run_algorithm(name, func, n):
         "Steps": steps
     }
 
-
 if __name__ == "__main__":
-    try:
-        initial = read_board("p2n-queen.txt")
-        n = len(initial)
-    except FileNotFoundError:
-        print("n-queen.txt not found → using random input")
-        n = int(input("Enter n (10-1000): "))
+    # --- Ask user for 4 different n values ---
+    n_values = []
+    print("Enter 4 different n values (10-1000):")
+    while len(n_values) < 4:
+        try:
+            n = int(input(f"Enter n[{len(n_values)+1}]: "))
+            validate_input(n)
+            n_values.append(n)
+        except ValueError as e:
+            print(f"Invalid input: {e}")
+
+    all_results = []
+
+    # --- Run algorithms for each n ---
+    for run_id, n in enumerate(n_values, start=1):
+        print(f"\n--- Run {run_id}: n={n} ---")
+
+        # Generate random board
         initial = generate_random_board(n)
+        print("Initial Board (first 20 positions):", initial[:20], "..." if n>20 else "")
 
-    validate_input(n)
+        # CSP Backtracking
+        result_csp = run_algorithm("CSP Backtracking", backtracking_csp, n)
+        result_csp["Run"] = run_id
+        result_csp["n"] = n
+        all_results.append(result_csp)
 
-    print("\nInitial Board:")
-    print_board(initial)
+        # Min-Conflicts
+        result_mc = run_algorithm("Min-Conflicts", min_conflicts, n)
+        result_mc["Run"] = run_id
+        result_mc["n"] = n
+        all_results.append(result_mc)
 
-    print("\nRunning Algorithms...\n")
+    # --- Create DataFrame ---
+    df = pd.DataFrame(all_results)
 
-    results = []
-
-    # CSP Backtracking
-    results.append(run_algorithm("CSP Backtracking", backtracking_csp, n))
-
-    # Iterative Search (Min-Conflicts)
-    results.append(run_algorithm("Min-Conflicts", min_conflicts, n))
-
-    # Print comparison table
-    header = f"{'Algorithm':<18} | {'Conflicts':<10} | {'Time(ms)':<10} | {'Mem(KB)':<10} | {'Solved':<6} | {'Steps'}"
-    print(header)
+    # --- Print table ---
+    header = f"{'Run':<5} | {'n':<5} | {'Algorithm':<18} | {'Conflicts':<10} | {'Time(ms)':<10} | {'Mem(KB)':<10} | {'Solved':<6} | {'Steps'}"
+    print("\n" + header)
     print("-" * len(header))
+    for _, r in df.iterrows():
+        print(f"{r['Run']:<5} | {r['n']:<5} | {r['Algorithm']:<18} | "
+              f"{r['Conflicts']:<10} | {r['Time']:<10.2f} | "
+              f"{r['Memory']:<10.2f} | {r['Solved']:<6} | {r['Steps']}")
 
-    for r in results:
-        print(f"{r['Algorithm']:<18} | "
-              f"{r['Conflicts']:<10} | "
-              f"{r['Time']:<10.2f} | "
-              f"{r['Memory']:<10.2f} | "
-              f"{r['Solved']:<6} | "
-              f"{r['Steps']}")
+    # --- Separate bar plots for Time, Memory, Steps ---
+    metrics = ["Time", "Memory", "Steps"]
+    metric_labels = {"Time": "Time (ms)", "Memory": "Memory (KB)", "Steps": "Steps"}
+    algorithms = df["Algorithm"].unique()
+    NUM_RUNS = len(n_values)
+    width = 0.35  # width of bars
 
+    for metric in metrics:
+        plt.figure(figsize=(10,5))
+        x = np.arange(NUM_RUNS)  # positions for runs
+
+        for i, algo in enumerate(algorithms):
+            values = df[df["Algorithm"] == algo][metric].values
+            bars = plt.bar(x + i*width, values, width=width, label=algo)
+
+            # Add numbers on top of bars
+            for bar in bars:
+                height = bar.get_height()
+                if metric == "Steps":
+                    plt.text(bar.get_x() + bar.get_width()/2, height, f'{int(height)}', ha='center', va='bottom', fontsize=8)
+                else:
+                    plt.text(bar.get_x() + bar.get_width()/2, height, f'{height:.1f}', ha='center', va='bottom', fontsize=8)
+
+        plt.xticks(x + width/2, [f"n={n}" for n in n_values])
+        plt.ylabel(metric_labels[metric])
+        plt.title(f"{metric_labels[metric]} Comparison for Different n Values")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
