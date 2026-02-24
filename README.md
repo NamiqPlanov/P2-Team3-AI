@@ -110,6 +110,8 @@ For large `n`, the board visualization is skipped to avoid huge outputs.
 
 A separate test script `test.py` is provided to validate algorithms on different board sizes. It measures performance, memory, and conflicts.
 
+![test sample](test.png)
+
 ---
 
 ## Report
