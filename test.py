@@ -8,7 +8,6 @@ def validate_input(n):
     if not (10 <= n <= 1000):
         raise ValueError("n must satisfy 10 <= n <= 1000")
 
-
 def generate_random_board(n):
     board = list(range(n))
     random.shuffle(board)
@@ -55,6 +54,7 @@ def run_algorithm(name, func, n):
         }
 
 if __name__ == "__main__":
+
     try:
         initial = read_board("p2n-queen.txt")
         n = len(initial)
