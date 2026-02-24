@@ -3,75 +3,68 @@ import time
 import tracemalloc
 from collections import deque
 
+# File Input
 def read_board(file_path):
     board = []
     with open(file_path, 'r') as f:
         for line in f:
-            # Remove comments and spaces
             line = line.split('#')[0].strip()
             if line:
-                # Add row's queen column to board
                 board.append(int(line))
     return board
 
+# Board Printing
 def print_board(queen_cols):
     n = len(queen_cols)
     for r in range(n):
-        # Print 'Q' for queen, '.' for empty
         print(' '.join('Q' if queen_cols[r] == c else '.' for c in range(n)))
     print()
 
-# Count conflicts for a queen at (row, col)
+
+# Conflict Counter
 def conflicts(board, row, col):
     count = 0
     for r, c in enumerate(board):
         if r == row:
             continue
-        # Check same column or diagonal conflict
         if c == col or abs(r-row) == abs(c-col):
             count += 1
     return count
 
-
+# AC3 Constraint Propagation
 def ac3(domains, n):
-    # Create all variable pairs to check
     queue = deque((i, j) for i in range(n) for j in range(n) if i != j)
     while queue:
         xi, xj = queue.popleft()
         if revise(domains, xi, xj):
             if not domains[xi]:
-                # No valid values left → failure
                 return False
             for k in range(n):
                 if k != xi:
-                    # Re-check neighbors if domains changed
                     queue.append((k, xi))
     return True
 
-# Domains for AC3
+
+# edit: Correct arc-consistency logic
 def revise(domains, xi, xj):
     revised = False
-    to_remove = set()
-    for vi in domains[xi]:
-        supported = False
-        for vj in domains[xj]:
-            # Value is valid if no conflicts with neighbor
-            if vj != vi and abs(xi - xj) != abs(vi - vj):
-                supported = True
-                break
-        if not supported:
-            to_remove.add(vi)
-    if to_remove:
-        # Remove unsupported values from domain
-        domains[xi] -= to_remove
-        revised = True
+    if len(domains[xj]) == 1:
+        vj = next(iter(domains[xj]))
+        diff = abs(xi - xj)
+        forbidden = {vj, vj + diff, vj - diff}
+        to_remove = domains[xi] & forbidden
+        if to_remove:
+            domains[xi] -= to_remove
+            revised = True
     return revised
 
-# Minimum Remaining Values
+
+# Heuristics
+# MRV + tie break by row index
 def select_var_mrv(unassigned, domains):
     return min(unassigned, key=lambda r: (len(domains[r]), r))
 
-# Least Constraining Value
+# LCV ordering
 def order_lcv(row, domains, assignment):
     def score(col):
         s = 0
@@ -80,148 +73,79 @@ def order_lcv(row, domains, assignment):
                 if c == col or abs(r-row) == abs(c-col):
                     s += 1
         return s
-    # Sort values that constrain others the least
     return sorted(domains[row], key=score)
 
+
+# Backtracking CSP (Iterative)
 def backtracking_csp(n):
-    # Start with all columns possible for each row
     domains = {i: set(range(n)) for i in range(n)}
-    ac3(domains, n)  # Reduce domains before starting
-
-    start = [-1]*n  # -1 means unassigned
+    ac3(domains, n)
+    start = [-1]*n
     stack = [(start, domains)]
-    steps = 0
-
+    steps = 0  # <-- step counter
     while stack:
         steps += 1
         assignment, doms = stack.pop()
-
-        # Checking if all rows have a queen
         if all(v != -1 for v in assignment):
             if sum(conflicts(assignment, r, assignment[r]) for r in range(n)) == 0:
-                return assignment, steps  # Found solution
+                return assignment, steps  # <-- return steps
             continue
-
-        # Picking next row to assign
         unassigned = [r for r in range(n) if assignment[r] == -1]
         row = select_var_mrv(unassigned, doms)
-
-        # Trying all valid columns, ordered by LCV
         for col in order_lcv(row, doms, assignment):
             new_assign = assignment[:]
             new_assign[row] = col
-
-            # Copy domains and fix current assignment
             new_domains = {r: doms[r].copy() for r in range(n)}
             new_domains[row] = {col}
-
-            # AC3 to reduce future conflicts
             if ac3(new_domains, n):
                 stack.append((new_assign, new_domains))
 
-    return None, steps  # No solution found
+    return None, steps  # <-- also return steps if no solution
 
-# For large n
+
+# Min-Conflicts (Iterative Search)
 def min_conflicts(n, max_steps=200000):
-    # Start with random initial board
     board = list(range(n))
     random.shuffle(board)
-
-    # Keep track of conflicts for fast lookup
-    col_count = [0]*n
-    diag1_count = [0]*(2*n)
-    diag2_count = [0]*(2*n)
-
-    for r in range(n):
-        c = board[r]
-        col_count[c] += 1
-        diag1_count[r - c + n] += 1
-        diag2_count[r + c] += 1
-
-    def conflict_count(r, c):
-        # Number of conflicts for (r, c)
-        return (
-            col_count[c] +
-            diag1_count[r - c + n] +
-            diag2_count[r + c] - 3  # remove self counts
-        )
-
     steps = 0
-
     for _ in range(max_steps):
         steps += 1
-
-        # Find all rows with conflicts
-        conflicted = [r for r in range(n) if conflict_count(r, board[r]) > 0]
+        conflicted = [r for r in range(n) if conflicts(board, r, board[r]) > 0]
         if not conflicted:
-            return board, steps  # solved
-
-        # Pick a random conflicted queen
+            return board, steps
         row = random.choice(conflicted)
 
-        # Remove old queen from counters
-        old_col = board[row]
-        col_count[old_col] -= 1
-        diag1_count[row - old_col + n] -= 1
-        diag2_count[row + old_col] -= 1
+        # edit: random tie-breaking among best columns
+        min_conf = min(conflicts(board, row, c) for c in range(n))
+        best_cols = [c for c in range(n) if conflicts(board, row, c) == min_conf]
+        board[row] = random.choice(best_cols)
 
-        # Find the best column with minimal conflicts
-        min_conf = float('inf')
-        best_cols = []
-
-        for c in range(n):
-            conf = (
-                col_count[c] +
-                diag1_count[row - c + n] +
-                diag2_count[row + c]
-            )
-            if conf < min_conf:
-                min_conf = conf
-                best_cols = [c]
-            elif conf == min_conf:
-                best_cols.append(c)
-
-        # Move queen to one of the best positions
-        new_col = random.choice(best_cols)
-        board[row] = new_col
-
-        # Update counters
-        col_count[new_col] += 1
-        diag1_count[row - new_col + n] += 1
-        diag2_count[row + new_col] += 1
-
-    return None, steps  # No solution within max_steps
+    return None, steps
 
 
+# Runner
 if __name__ == "__main__":
-
     try:
-        initial = read_board("p2_n-queen.txt")
+        initial = read_board("2_n-queen.txt")
         n = len(initial)
     except FileNotFoundError:
-        print("p2_n-queen.txt not found → using manual input")
-        n = int(input("Number of lines (10-1000): "))
+        print("n-queen.txt not found → using random n")
+        n = int(input('Number of lines:'))
+        initial = [random.randint(0, n-1) for _ in range(n)]
 
-    if n < 10 or n > 1000:
-        raise ValueError("n must be between 10 and 1000")
+    print("Initial board:")
+    print_board(initial)
 
-    print(f"\nSolving N-Queens for n = {n}")
+    tracemalloc.start()
+    t0 = time.perf_counter()
 
-    tracemalloc.start()  # Start memory tracking
-    t0 = time.perf_counter()  # Start timer
-
-    if n <= 50:
-        solution, steps = backtracking_csp(n)
-        alg_name = "CSP Backtracking"
-        heuristics_used = "MRV + LCV + AC3"
-    else:
-        solution, steps = min_conflicts(n)
-        alg_name = "Min-Conflicts"
-        heuristics_used = "Iterative Repair + Random TieBreak"
+    solution, steps = backtracking_csp(n)
+    alg_name = "CSP Backtracking"
+    heuristics_used = "MRV + LCV + TieBreak + AC3"
 
     t1 = time.perf_counter()
     peak_mem = tracemalloc.get_traced_memory()[1] / 1024
-    tracemalloc.stop()  # Stop memory tracking
+    tracemalloc.stop()
 
     time_ms = (t1 - t0) * 1000
 
@@ -230,21 +154,13 @@ if __name__ == "__main__":
     else:
         total_conf = "N/A"
 
-    # Printing results
-    header = f"{'Algorithm':<18} | {'Heuristics':<30} | {'Conflicts':<10} | {'Time(ms)':<10} | {'Mem(KB)':<10} | {'Solved':<6} | {'Steps'}"
+    header = f"{'Algorithm':<18} | {'Heuristics':<28} | {'Conflicts':<10} | {'Time(ms)':<10} | {'Mem(KB)':<10} | {'Solved':<6} | {'Steps'}"
     print("\n" + header)
     print("-"*len(header))
 
-    print(f"{alg_name:<18} | {heuristics_used:<30} | {total_conf:<10} | {time_ms:<10.2f} | {peak_mem:<10.2f} | {'Yes' if solution else 'No'} | {steps}")
-
+    print(f"{alg_name:<18} | {heuristics_used:<28} | {total_conf:<10} | {time_ms:<10.2f} | {peak_mem:<10.2f} | {'Yes' if solution else 'No'} | {steps}")
     if solution:
-        print("\nSolution (column index per row):")
-        print(solution)
-
-        if n <= 50:
-            print("\nBoard visualization:")
-            print_board(solution)
-        else:
-            print("\nBoard not printed (n too large).")
+        print("\nSolved board:")
+        print_board(solution)
     else:
         print("\nNo solution found.")
