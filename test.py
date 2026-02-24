@@ -14,38 +14,45 @@ def generate_random_board(n):
     random.shuffle(board)
     return board
 
-
 def run_algorithm(name, func, n):
-    tracemalloc.start()
-    t0 = time.perf_counter()
+    try:
+        tracemalloc.start()
+        t0 = time.perf_counter()
 
-    result = func(n)
+        solution, steps = func(n)
 
-    t1 = time.perf_counter()
-    peak_mem = tracemalloc.get_traced_memory()[1] / 1024
-    tracemalloc.stop()
+        t1 = time.perf_counter()
+        peak_mem = tracemalloc.get_traced_memory()[1] / 1024
+        tracemalloc.stop()
 
-    time_ms = (t1 - t0) * 1000
+        time_ms = (t1 - t0) * 1000
 
-    # --- ALWAYS UNPACK solution and steps ---
-    solution, steps = result  # works for BOTH algorithms now
+        if solution:
+            total_conf = sum(conflicts(solution, r, solution[r]) for r in range(n)) // 2
+            solved = "Yes"
+        else:
+            total_conf = "N/A"
+            solved = "No"
 
-    if solution:
-        total_conf = sum(conflicts(solution, r, solution[r]) for r in range(n)) // 2
-        solved = "Yes"
-    else:
-        total_conf = "N/A"
-        solved = "No"
+        return {
+            "Algorithm": name,
+            "Conflicts": total_conf,
+            "Time": time_ms,
+            "Memory": peak_mem,
+            "Solved": solved,
+            "Steps": steps
+        }
 
-    return {
-        "Algorithm": name,
-        "Conflicts": total_conf,
-        "Time": time_ms,
-        "Memory": peak_mem,
-        "Solved": solved,
-        "Steps": steps
-    }
-
+    except Exception as e:
+        tracemalloc.stop()
+        return {
+            "Algorithm": name,
+            "Conflicts": "Error",
+            "Time": 0,
+            "Memory": 0,
+            "Solved": "Error",
+            "Steps": "-"
+        }
 
 if __name__ == "__main__":
     try:
@@ -58,21 +65,33 @@ if __name__ == "__main__":
 
     validate_input(n)
 
-    print("\nInitial Board:")
-    print_board(initial)
+    print(f"\nSolving N-Queens for n = {n}")
+
+    if n <= 50:
+        print("\nInitial Board:")
+        print_board(initial)
+    else:
+        print("\nInitial board generated (not printed due to large n).")
 
     print("\nRunning Algorithms...\n")
 
     results = []
 
-    # CSP Backtracking
-    results.append(run_algorithm("CSP Backtracking", backtracking_csp, n))
+    if n <= 50:
+        results.append(run_algorithm("CSP Backtracking", backtracking_csp, n))
+    else:
+        results.append({
+            "Algorithm": "CSP Backtracking",
+            "Conflicts": "Skipped",
+            "Time": 0,
+            "Memory": 0,
+            "Solved": "Skipped",
+            "Steps": "-"
+        })
 
-    # Iterative Search (Min-Conflicts)
     results.append(run_algorithm("Min-Conflicts", min_conflicts, n))
 
-    # Print comparison table
-    header = f"{'Algorithm':<18} | {'Conflicts':<10} | {'Time(ms)':<10} | {'Mem(KB)':<10} | {'Solved':<6} | {'Steps'}"
+    header = f"{'Algorithm':<18} | {'Conflicts':<10} | {'Time(ms)':<10} | {'Mem(KB)':<10} | {'Solved':<8} | {'Steps'}"
     print(header)
     print("-" * len(header))
 
@@ -81,6 +100,5 @@ if __name__ == "__main__":
               f"{r['Conflicts']:<10} | "
               f"{r['Time']:<10.2f} | "
               f"{r['Memory']:<10.2f} | "
-              f"{r['Solved']:<6} | "
+              f"{r['Solved']:<8} | "
               f"{r['Steps']}")
-
